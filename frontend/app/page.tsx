@@ -12,6 +12,23 @@ type Notice = {
 };
 type ActiveUser = { id: string; full_name: string | null };
 type Me = { id: string; email: string; full_name: string | null };
+type StudyPlan = {
+  id: string;
+  exam_id: string | null;
+  position_id: string | null;
+  title: string;
+  available_minutes_per_day: number;
+  starts_on: string;
+  ends_on: string | null;
+  is_active: boolean;
+};
+type ScheduleEntry = {
+  item: { id: string; subject_id: string | null; topic_id: string | null; scheduled_for: string; planned_minutes: number; priority: number };
+  subject_name: string | null;
+  topic_name: string | null;
+  session_id: string | null;
+  session_status: string;
+};
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const fadeUp = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } };
@@ -24,7 +41,12 @@ export default function Home() {
   const [selected, setSelected] = useState("");
   const [notices, setNotices] = useState<Notice[]>([]);
   const [users, setUsers] = useState<ActiveUser[]>([]);
-  const [tab, setTab] = useState<"painel" | "usuarios">("painel");
+  const [studyPlans, setStudyPlans] = useState<StudyPlan[]>([]);
+  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+  const [creatingPlan, setCreatingPlan] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [itemActionId, setItemActionId] = useState<string | null>(null);
+  const [tab, setTab] = useState<"painel" | "usuarios" | "rotina">("painel");
   const [msg, setMsg] = useState("Entre para conectar seus dados.");
   const [me, setMe] = useState<Me | null>(null);
   const [username, setUsername] = useState("");
@@ -59,6 +81,19 @@ export default function Home() {
       setUsers(await (await req("/api/v1/users", {}, authToken)).json());
     } catch {
       setUsers([]);
+    }
+    try {
+      setStudyPlans(await (await req("/api/v1/study-plans", {}, authToken)).json());
+    } catch {
+      setStudyPlans([]);
+    }
+  };
+
+  const loadSchedule = async (planId: string) => {
+    try {
+      setSchedule(await (await req(`/api/v1/study-plans/${planId}/schedule`)).json());
+    } catch {
+      setSchedule([]);
     }
   };
 
@@ -99,6 +134,13 @@ export default function Home() {
   useEffect(() => {
     if (token) void loadNotices();
   }, [token, selected]);
+
+  const activePlan = studyPlans.find((plan) => plan.exam_id === selected && plan.is_active) || null;
+
+  useEffect(() => {
+    if (activePlan) void loadSchedule(activePlan.id);
+    else setSchedule([]);
+  }, [activePlan?.id]);
 
   const login = async (event: FormEvent) => {
     event.preventDefault();
@@ -205,6 +247,66 @@ export default function Home() {
     }
   };
 
+  const createStudyPlan = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setCreatingPlan(true);
+    try {
+      const created = await (
+        await req("/api/v1/study-plans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            exam_id: selected,
+            title: form.get("title"),
+            available_minutes_per_day: Number(form.get("minutes")),
+            starts_on: form.get("starts_on"),
+            ends_on: form.get("ends_on") || null,
+          }),
+        })
+      ).json();
+      setStudyPlans((current) => [created, ...current]);
+      setMsg("Plano de estudos gerado.");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Não deu pra gerar o plano");
+    } finally {
+      setCreatingPlan(false);
+    }
+  };
+
+  const reschedulePlan = async () => {
+    if (!activePlan) return;
+    setRescheduling(true);
+    try {
+      setSchedule(await (await req(`/api/v1/study-plans/${activePlan.id}/reschedule`, { method: "POST" })).json());
+      setMsg("Agenda futura recalculada.");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Não deu pra reagendar");
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
+  const markItem = async (itemId: string, outcome: "complete" | "skip") => {
+    if (!activePlan) return;
+    setItemActionId(itemId);
+    try {
+      await req(`/api/v1/study-plans/${activePlan.id}/items/${itemId}/${outcome}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      await loadSchedule(activePlan.id);
+      setMsg(outcome === "complete" ? "Sessão marcada como concluída." : "Sessão marcada como pulada.");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Não deu pra registrar");
+    } finally {
+      setItemActionId(null);
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem("concursos_token");
     setToken("");
@@ -304,13 +406,88 @@ export default function Home() {
           <LayoutGrid size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
           Painel
         </button>
+        <button className={tab === "rotina" ? "" : "ghost"} role="tab" aria-selected={tab === "rotina"} onClick={() => setTab("rotina")}>
+          <BookOpen size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+          Rotina
+        </button>
         <button className={tab === "usuarios" ? "" : "ghost"} role="tab" aria-selected={tab === "usuarios"} onClick={() => setTab("usuarios")}>
           <Users size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
           Usuários ativos
         </button>
       </div>
 
-      {tab === "usuarios" ? (
+      {tab === "rotina" ? (
+        <motion.section className="panel" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4 }}>
+          <h2>Rotina de estudos</h2>
+
+          {!selected && <p className="hint" style={{ marginTop: 10 }}>Selecione um concurso no Painel primeiro.</p>}
+
+          {selected && !activePlan && (
+            <form onSubmit={createStudyPlan} style={{ marginTop: 12 }}>
+              <input required name="title" placeholder="Nome do plano" defaultValue="Plano de estudos" aria-label="Nome do plano" />
+              <input required name="minutes" type="number" min={15} max={720} defaultValue={60} placeholder="Minutos por dia" aria-label="Minutos disponíveis por dia" />
+              <label className="field">
+                Início
+                <input required name="starts_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)} aria-label="Data de início" />
+              </label>
+              <label className="field">
+                Fim (opcional — usa a data da prova se vazio)
+                <input name="ends_on" type="date" aria-label="Data final" />
+              </label>
+              <button type="submit" disabled={creatingPlan}>
+                {creatingPlan ? "Gerando…" : "Gerar plano"}
+              </button>
+            </form>
+          )}
+
+          {selected && activePlan && (
+            <>
+              <div className="item" style={{ borderTop: "none", paddingTop: 0 }}>
+                <div>
+                  <b>{activePlan.title}</b>
+                  <small>
+                    {activePlan.available_minutes_per_day} min/dia · {activePlan.starts_on} até {activePlan.ends_on || "data da prova"}
+                  </small>
+                </div>
+                <button className="ghost" disabled={rescheduling} onClick={reschedulePlan}>
+                  {rescheduling ? "Reagendando…" : "Reagendar"}
+                </button>
+              </div>
+
+              {schedule.length === 0 && <p className="hint" style={{ marginTop: 14 }}>Sem sessões geradas ainda.</p>}
+
+              {schedule.map((entry) => {
+                const when = new Date(entry.item.scheduled_for);
+                const isDone = entry.session_status === "completed" || entry.session_status === "skipped";
+                return (
+                  <div className="item" key={entry.item.id}>
+                    <div>
+                      <b>
+                        {entry.subject_name || "Assunto"}
+                        {entry.topic_name ? ` · ${entry.topic_name}` : ""}
+                      </b>
+                      <small>
+                        {when.toLocaleDateString("pt-BR")} {when.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {entry.item.planned_minutes} min ·{" "}
+                        {entry.session_status === "completed" ? "Concluída" : entry.session_status === "skipped" ? "Pulada" : "Planejada"}
+                      </small>
+                    </div>
+                    {!isDone && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button className="ghost" disabled={itemActionId === entry.item.id} onClick={() => markItem(entry.item.id, "complete")}>
+                          Concluir
+                        </button>
+                        <button className="ghost" disabled={itemActionId === entry.item.id} onClick={() => markItem(entry.item.id, "skip")}>
+                          Pular
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </motion.section>
+      ) : tab === "usuarios" ? (
         <motion.section className="panel" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4 }}>
           <h2>Usuários ativos</h2>
           {users.length === 0 && <p className="hint" style={{ marginTop: 10 }}>Nenhum usuário encontrado.</p>}
@@ -435,10 +612,10 @@ export default function Home() {
               <h2 style={{ marginTop: 10 }}>Provas e simulados</h2>
               <p>Questões e gabaritos importados por prova.</p>
             </article>
-            <article className="panel">
+            <article className="panel" role="button" tabIndex={0} onClick={() => setTab("rotina")} style={{ cursor: "pointer" }}>
               <BookOpen size={18} color="var(--accent)" />
               <h2 style={{ marginTop: 10 }}>Rotina</h2>
-              <p>Seu plano adaptativo de estudos aparece aqui.</p>
+              <p>{activePlan ? `${schedule.length} sessões planejadas — ver agenda` : "Gerar plano adaptativo de estudos"}</p>
             </article>
             <article className="panel">
               <Target size={18} color="var(--accent)" />
