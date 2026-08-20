@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, FileText, LogOut, Sparkles, Target, Upload } from "lucide-react";
+import { BookOpen, FileText, LayoutGrid, LogOut, Sparkles, Target, Upload, Users } from "lucide-react";
 
 type Exam = { id: string; title: string };
 type Notice = {
@@ -10,6 +10,8 @@ type Notice = {
   filename: string;
   extraction_metadata: { analysis?: { subjects?: { name: string }[] } };
 };
+type ActiveUser = { id: string; full_name: string | null };
+type Me = { id: string; email: string; full_name: string | null };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const fadeUp = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } };
@@ -21,7 +23,12 @@ export default function Home() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [selected, setSelected] = useState("");
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [users, setUsers] = useState<ActiveUser[]>([]);
+  const [tab, setTab] = useState<"painel" | "usuarios">("painel");
   const [msg, setMsg] = useState("Entre para conectar seus dados.");
+  const [me, setMe] = useState<Me | null>(null);
+  const [username, setUsername] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   const req = async (path: string, init: RequestInit = {}, authToken = token) => {
     const res = await fetch(API + path, { ...init, headers: { Authorization: `Bearer ${authToken}`, ...init.headers } });
@@ -31,11 +38,38 @@ export default function Home() {
 
   const load = async (authToken = token) => {
     try {
+      setMe(await (await req("/api/v1/auth/me", {}, authToken)).json());
+    } catch {
+      setMe(null);
+    }
+    try {
       const data = await (await req("/api/v1/exams", {}, authToken)).json();
       setExams(data);
       if (data[0]) setSelected((current: string) => current || data[0].id);
     } catch (error) {
       setMsg(error instanceof Error ? error.message : "API indisponível");
+    }
+    try {
+      setUsers(await (await req("/api/v1/users", {}, authToken)).json());
+    } catch {
+      setUsers([]);
+    }
+  };
+
+  const saveUsername = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!username.trim()) return;
+    setSavingName(true);
+    try {
+      const updated = await (
+        await req("/api/v1/auth/me", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ full_name: username.trim() }) })
+      ).json();
+      setMe(updated);
+      await load();
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Não deu pra salvar o nome");
+    } finally {
+      setSavingName(false);
     }
   };
 
@@ -162,6 +196,38 @@ export default function Home() {
     );
   }
 
+  if (me && !me.full_name) {
+    return (
+      <main className="auth">
+        <motion.div className="auth-copy" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
+          <span className="eyebrow">
+            <Sparkles size={13} /> Quase lá
+          </span>
+          <h1>Como te chamamos?</h1>
+          <p>Escolha o nome que os outros vão ver no painel. Dá pra trocar depois se quiser.</p>
+        </motion.div>
+
+        <motion.form
+          className="panel"
+          onSubmit={saveUsername}
+          initial="hidden"
+          animate="show"
+          variants={fadeUp}
+          transition={{ duration: 0.5, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <h2>Criar nome de usuário</h2>
+          <label className="field">
+            Nome
+            <input required minLength={1} maxLength={120} placeholder="Seu nome" aria-label="Nome de usuário" value={username} onChange={(e) => setUsername(e.target.value)} />
+          </label>
+          <button type="submit" disabled={savingName}>
+            {savingName ? "Salvando…" : "Continuar"}
+          </button>
+        </motion.form>
+      </main>
+    );
+  }
+
   const subjectsCount = notices.reduce((total, notice) => total + (notice.extraction_metadata.analysis?.subjects?.length || 0), 0);
 
   return (
@@ -171,7 +237,7 @@ export default function Home() {
           <span className="eyebrow">
             <Target size={13} /> Painel de estudos
           </span>
-          <h1>Seu próximo avanço</h1>
+          <h1>{me?.full_name ? `Bem-vindo, ${me.full_name.split(" ")[0]}` : "Seu próximo avanço"}</h1>
         </div>
         <button className="ghost" onClick={logout}>
           <LogOut size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
@@ -184,22 +250,48 @@ export default function Home() {
         {msg}
       </p>
 
-      <motion.section className="metrics" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4 }}>
-        <article>
-          <b>{exams.length}</b>
-          <small>Concursos</small>
-        </article>
-        <article>
-          <b>{notices.length}</b>
-          <small>Editais</small>
-        </article>
-        <article>
-          <b>{subjectsCount}</b>
-          <small>Disciplinas mapeadas</small>
-        </article>
-      </motion.section>
+      <div className="tabs" role="tablist">
+        <button className={tab === "painel" ? "" : "ghost"} role="tab" aria-selected={tab === "painel"} onClick={() => setTab("painel")}>
+          <LayoutGrid size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+          Painel
+        </button>
+        <button className={tab === "usuarios" ? "" : "ghost"} role="tab" aria-selected={tab === "usuarios"} onClick={() => setTab("usuarios")}>
+          <Users size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+          Usuários ativos
+        </button>
+      </div>
 
-      <motion.section className="workspace" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4, delay: 0.05 }}>
+      {tab === "usuarios" ? (
+        <motion.section className="panel" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4 }}>
+          <h2>Usuários ativos</h2>
+          {users.length === 0 && <p className="hint" style={{ marginTop: 10 }}>Nenhum usuário encontrado.</p>}
+          {users.map((user) => (
+            <div className="item" key={user.id}>
+              <div className="user-row">
+                <span className="avatar">{(user.full_name || "?").charAt(0).toUpperCase()}</span>
+                <b>{user.full_name || "Sem nome"}</b>
+              </div>
+            </div>
+          ))}
+        </motion.section>
+      ) : (
+        <>
+          <motion.section className="metrics" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4 }}>
+            <article>
+              <b>{exams.length}</b>
+              <small>Concursos</small>
+            </article>
+            <article>
+              <b>{notices.length}</b>
+              <small>Editais</small>
+            </article>
+            <article>
+              <b>{subjectsCount}</b>
+              <small>Disciplinas mapeadas</small>
+            </article>
+          </motion.section>
+
+          <motion.section className="workspace" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4, delay: 0.05 }}>
         <aside className="panel">
           <h2>Concursos</h2>
           <form style={{ marginTop: 12 }}>
@@ -263,7 +355,9 @@ export default function Home() {
             </article>
           </section>
         </div>
-      </motion.section>
+          </motion.section>
+        </>
+      )}
     </main>
   );
 }

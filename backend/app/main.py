@@ -12,7 +12,7 @@ from .models import Base, User
 from .notices import router as notices_router
 from .papers import router as papers_router
 from .questions import router as questions_router
-from .schemas import LoginRequest, Token, UserCreate, UserRead, UserSummary
+from .schemas import LoginRequest, Token, UserCreate, UserProfileUpdate, UserRead, UserSummary
 from .security import create_access_token, hash_password, verify_password
 from .study_plans import router as study_plans_router
 
@@ -59,6 +59,13 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_sessi
 
 @app.get("/api/v1/auth/me", response_model=UserRead)
 async def current_user(user: User = Depends(get_current_user)) -> User:
+    return user
+
+@app.put("/api/v1/auth/me", response_model=UserRead)
+async def update_current_user(payload: UserProfileUpdate, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)) -> User:
+    user.full_name = payload.full_name.strip()
+    await session.commit()
+    await session.refresh(user)
     return user
 
 @app.get("/api/v1/users", response_model=list[UserSummary])
