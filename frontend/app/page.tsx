@@ -1,5 +1,269 @@
 "use client";
+
 import { FormEvent, useEffect, useState } from "react";
-type Exam={id:string;title:string}; type Notice={id:string;filename:string;extraction_metadata:{analysis?:{subjects?:{name:string}[]}}};
-const API=process.env.NEXT_PUBLIC_API_URL??"http://localhost:8000";
-export default function Home(){const[token,setToken]=useState("");const[email,setEmail]=useState("");const[password,setPassword]=useState("");const[exams,setExams]=useState<Exam[]>([]);const[selected,setSelected]=useState("");const[notices,setNotices]=useState<Notice[]>([]);const[msg,setMsg]=useState("Entre para conectar seus dados.");const req=async(p:string,i:RequestInit={},t=token)=>{const r=await fetch(API+p,{...i,headers:{Authorization:`Bearer ${t}`,...i.headers}});if(!r.ok)throw new Error((await r.json().catch(()=>({detail:"Erro na API"}))).detail);return r};const load=async(t=token)=>{try{const d=await(await req("/api/v1/exams",{},t)).json();setExams(d);if(d[0])setSelected((v:string)=>v||d[0].id)}catch(e){setMsg(e instanceof Error?e.message:"API indisponível")}};const loadNotices=async(id=selected)=>{if(id)try{setNotices(await(await req(`/api/v1/exams/${id}/notices`)).json())}catch{setNotices([])}};useEffect(()=>{const t=localStorage.getItem("concursos_token");if(t){setToken(t);void load(t)}},[]);useEffect(()=>{if(token)void loadNotices()},[token,selected]);const login=async(e:FormEvent)=>{e.preventDefault();try{const r=await fetch(API+"/api/v1/auth/token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});const d=await r.json();if(!r.ok)throw new Error(d.detail);localStorage.setItem("concursos_token",d.access_token);setToken(d.access_token);await load(d.access_token)}catch(e){setMsg(e instanceof Error?e.message:"Falha")}};const create=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();const f=new FormData(e.currentTarget);try{const d=await(await req("/api/v1/exams",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:f.get("title"),examining_board:f.get("board")||null})})).json();setExams(x=>[d,...x]);setSelected(d.id);e.currentTarget.reset()}catch(e){setMsg(e instanceof Error?e.message:"Falha")}};const upload=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();const file=new FormData(e.currentTarget).get("file");if(!(file instanceof File)||!selected)return;const f=new FormData();f.append("file",file);try{await req(`/api/v1/exams/${selected}/notices`,{method:"POST",body:f});await loadNotices();setMsg("Edital importado.")}catch(e){setMsg(e instanceof Error?e.message:"Falha")}};const analyze=async(id:string)=>{try{await req(`/api/v1/exams/${selected}/notices/${id}/analyze`,{method:"POST"});await loadNotices();setMsg("Edital analisado.")}catch(e){setMsg(e instanceof Error?e.message:"Falha")}};if(!token)return <main className="auth"><div><span>CONCURSOS</span><h1>Estude com direção.</h1><p>Editais, provas e desempenho em um só lugar.</p></div><form className="panel" onSubmit={login}><h2>Entrar</h2><input required type="email" placeholder="E-mail" onChange={e=>setEmail(e.target.value)}/><input required type="password" placeholder="Senha" onChange={e=>setPassword(e.target.value)}/><button>Entrar</button><small>{msg}</small></form></main>;return <main><header><div><span>PAINEL DE ESTUDOS</span><h1>Seu próximo avanço</h1></div><button onClick={()=>{localStorage.removeItem("concursos_token");setToken("")}}>Sair</button></header><p>{msg}</p><section className="metrics"><article><b>{exams.length}</b>concursos</article><article><b>{notices.length}</b>editais</article><article><b>{notices.reduce((n,x)=>n+(x.extraction_metadata.analysis?.subjects?.length||0),0)}</b>disciplinas</article></section><section className="workspace"><aside className="panel"><h2>Concursos</h2><select value={selected} onChange={e=>setSelected(e.target.value)}>{exams.map(x=><option key={x.id} value={x.id}>{x.title}</option>)}</select><form onSubmit={create}><input required name="title" placeholder="Novo concurso"/><input name="board" placeholder="Banca"/><button>Criar</button></form></aside><div><section className="panel"><h2>Editar e analisar</h2><form onSubmit={upload}><input required name="file" type="file" accept="application/pdf" disabled={!selected}/><button disabled={!selected}>Importar edital</button></form>{notices.map(x=><article className="item" key={x.id}><div><b>{x.filename}</b><small>{x.extraction_metadata.analysis?.subjects?.map(s=>s.name).join(" · ")||"Aguardando análise"}</small></div><button onClick={()=>analyze(x.id)}>Analisar</button></article>)}</section><section className="cards"><article className="panel"><h2>Provas e simulados</h2><p>Questões e gabaritos conectados à etapa 5.</p></article><article className="panel"><h2>Rotina</h2><p>Plano adaptativo aparecerá aqui.</p></article><article className="panel"><h2>Competitividade</h2><p>Margem e nota de corte aparecerão aqui.</p></article></section></div></section></main>}
+import { motion } from "framer-motion";
+import { BookOpen, FileText, LogOut, Sparkles, Target, Upload } from "lucide-react";
+
+type Exam = { id: string; title: string };
+type Notice = {
+  id: string;
+  filename: string;
+  extraction_metadata: { analysis?: { subjects?: { name: string }[] } };
+};
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const fadeUp = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } };
+
+export default function Home() {
+  const [token, setToken] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [selected, setSelected] = useState("");
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [msg, setMsg] = useState("Entre para conectar seus dados.");
+
+  const req = async (path: string, init: RequestInit = {}, authToken = token) => {
+    const res = await fetch(API + path, { ...init, headers: { Authorization: `Bearer ${authToken}`, ...init.headers } });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: "Erro na API" }))).detail);
+    return res;
+  };
+
+  const load = async (authToken = token) => {
+    try {
+      const data = await (await req("/api/v1/exams", {}, authToken)).json();
+      setExams(data);
+      if (data[0]) setSelected((current: string) => current || data[0].id);
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "API indisponível");
+    }
+  };
+
+  const loadNotices = async (examId = selected) => {
+    if (!examId) return;
+    try {
+      setNotices(await (await req(`/api/v1/exams/${examId}/notices`)).json());
+    } catch {
+      setNotices([]);
+    }
+  };
+
+  useEffect(() => {
+    const stored = localStorage.getItem("concursos_token");
+    if (stored) {
+      setToken(stored);
+      void load(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (token) void loadNotices();
+  }, [token, selected]);
+
+  const login = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      const res = await fetch(API + "/api/v1/auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      localStorage.setItem("concursos_token", data.access_token);
+      setToken(data.access_token);
+      await load(data.access_token);
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Falha ao entrar");
+    }
+  };
+
+  const createExam = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      const created = await (
+        await req("/api/v1/exams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: form.get("title"), examining_board: form.get("board") || null }),
+        })
+      ).json();
+      setExams((current) => [created, ...current]);
+      setSelected(created.id);
+      event.currentTarget.reset();
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Não deu pra criar o concurso");
+    }
+  };
+
+  const uploadNotice = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const file = new FormData(event.currentTarget).get("file");
+    if (!(file instanceof File) || !selected) return;
+    const body = new FormData();
+    body.append("file", file);
+    try {
+      await req(`/api/v1/exams/${selected}/notices`, { method: "POST", body });
+      await loadNotices();
+      setMsg("Edital importado.");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Não deu pra importar o edital");
+    }
+  };
+
+  const analyzeNotice = async (noticeId: string) => {
+    try {
+      await req(`/api/v1/exams/${selected}/notices/${noticeId}/analyze`, { method: "POST" });
+      await loadNotices();
+      setMsg("Edital analisado.");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Não deu pra analisar o edital");
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem("concursos_token");
+    setToken("");
+  };
+
+  if (!token) {
+    return (
+      <main className="auth">
+        <motion.div className="auth-copy" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
+          <span className="eyebrow">
+            <Sparkles size={13} /> Concursos
+          </span>
+          <h1>Estude com direção.</h1>
+          <p>Editais, provas e desempenho num só lugar — e um plano que se ajusta ao que você já sabe.</p>
+        </motion.div>
+
+        <motion.form
+          className="panel"
+          onSubmit={login}
+          initial="hidden"
+          animate="show"
+          variants={fadeUp}
+          transition={{ duration: 0.5, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <h2>Entrar</h2>
+          <label className="field">
+            E-mail
+            <input required type="email" placeholder="voce@email.com" aria-label="E-mail" onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className="field">
+            Senha
+            <input required type="password" placeholder="••••••••" aria-label="Senha" onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          <button type="submit">Entrar</button>
+          <small className="hint">{msg}</small>
+        </motion.form>
+      </main>
+    );
+  }
+
+  const subjectsCount = notices.reduce((total, notice) => total + (notice.extraction_metadata.analysis?.subjects?.length || 0), 0);
+
+  return (
+    <main>
+      <div className="app-header">
+        <div>
+          <span className="eyebrow">
+            <Target size={13} /> Painel de estudos
+          </span>
+          <h1>Seu próximo avanço</h1>
+        </div>
+        <button className="ghost" onClick={logout}>
+          <LogOut size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+          Sair
+        </button>
+      </div>
+
+      <p className="status-line">
+        <span className="status-dot" />
+        {msg}
+      </p>
+
+      <motion.section className="metrics" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4 }}>
+        <article>
+          <b>{exams.length}</b>
+          <small>Concursos</small>
+        </article>
+        <article>
+          <b>{notices.length}</b>
+          <small>Editais</small>
+        </article>
+        <article>
+          <b>{subjectsCount}</b>
+          <small>Disciplinas mapeadas</small>
+        </article>
+      </motion.section>
+
+      <motion.section className="workspace" initial="hidden" animate="show" variants={fadeUp} transition={{ duration: 0.4, delay: 0.05 }}>
+        <aside className="panel">
+          <h2>Concursos</h2>
+          <form style={{ marginTop: 12 }}>
+            <select value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Concurso selecionado">
+              {exams.length === 0 && <option value="">Nenhum concurso ainda</option>}
+              {exams.map((exam) => (
+                <option key={exam.id} value={exam.id}>
+                  {exam.title}
+                </option>
+              ))}
+            </select>
+          </form>
+          <form onSubmit={createExam}>
+            <input required name="title" placeholder="Novo concurso" aria-label="Nome do novo concurso" />
+            <input name="board" placeholder="Banca (opcional)" aria-label="Banca examinadora" />
+            <button type="submit">Criar concurso</button>
+          </form>
+        </aside>
+
+        <div>
+          <section className="panel">
+            <h2>Edital e análise</h2>
+            <form onSubmit={uploadNotice}>
+              <input required name="file" type="file" accept="application/pdf" disabled={!selected} aria-label="Arquivo do edital em PDF" />
+              <button type="submit" disabled={!selected}>
+                <Upload size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+                Importar edital
+              </button>
+            </form>
+
+            {notices.length === 0 && <p className="hint" style={{ marginTop: 14 }}>Nenhum edital importado ainda para este concurso.</p>}
+
+            {notices.map((notice) => (
+              <div className="item" key={notice.id}>
+                <div>
+                  <b>{notice.filename}</b>
+                  <small>{notice.extraction_metadata.analysis?.subjects?.map((s) => s.name).join(" · ") || "Aguardando análise"}</small>
+                </div>
+                <button className="ghost" onClick={() => analyzeNotice(notice.id)}>
+                  Analisar
+                </button>
+              </div>
+            ))}
+          </section>
+
+          <section className="cards">
+            <article className="panel">
+              <FileText size={18} color="var(--accent)" />
+              <h2 style={{ marginTop: 10 }}>Provas e simulados</h2>
+              <p>Questões e gabaritos importados por prova.</p>
+            </article>
+            <article className="panel">
+              <BookOpen size={18} color="var(--accent)" />
+              <h2 style={{ marginTop: 10 }}>Rotina</h2>
+              <p>Seu plano adaptativo de estudos aparece aqui.</p>
+            </article>
+            <article className="panel">
+              <Target size={18} color="var(--accent)" />
+              <h2 style={{ marginTop: 10 }}>Competitividade</h2>
+              <p>Margem e nota de corte estimadas aparecem aqui.</p>
+            </article>
+          </section>
+        </div>
+      </motion.section>
+    </main>
+  );
+}
