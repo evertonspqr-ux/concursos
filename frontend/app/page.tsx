@@ -32,6 +32,7 @@ export default function Home() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const req = async (path: string, init: RequestInit = {}, authToken = token) => {
@@ -172,12 +173,20 @@ export default function Home() {
   };
 
   const analyzeNotice = async (noticeId: string) => {
+    setAnalyzingId(noticeId);
     try {
-      await req(`/api/v1/exams/${selected}/notices/${noticeId}/analyze`, { method: "POST" });
+      const result = await (await req(`/api/v1/exams/${selected}/notices/${noticeId}/analyze`, { method: "POST" })).json();
       await loadNotices();
-      setMsg("Edital analisado.");
+      const foundSomething = Boolean(result.examining_board) || (result.subjects?.length ?? 0) > 0 || (result.positions?.length ?? 0) > 0;
+      setMsg(
+        foundSomething
+          ? "Edital analisado."
+          : "Analisado, mas não achou banca/disciplinas — provável PDF escaneado (imagem), sem texto pra ler."
+      );
     } catch (error) {
       setMsg(error instanceof Error ? error.message : "Não deu pra analisar o edital");
+    } finally {
+      setAnalyzingId(null);
     }
   };
 
@@ -376,17 +385,22 @@ export default function Home() {
 
             {notices.length === 0 && <p className="hint" style={{ marginTop: 14 }}>Nenhum edital importado ainda para este concurso.</p>}
 
-            {notices.map((notice) => (
-              <div className="item" key={notice.id}>
-                <div>
-                  <b>{notice.filename}</b>
-                  <small>{notice.extraction_metadata.analysis?.subjects?.map((s) => s.name).join(" · ") || "Aguardando análise"}</small>
+            {notices.map((notice) => {
+              const analysis = notice.extraction_metadata.analysis;
+              const subjectNames = analysis?.subjects?.map((s) => s.name).join(" · ");
+              const label = subjectNames || (analysis ? "Nada identificado (PDF pode ser escaneado)" : "Aguardando análise");
+              return (
+                <div className="item" key={notice.id}>
+                  <div>
+                    <b>{notice.filename}</b>
+                    <small>{label}</small>
+                  </div>
+                  <button className="ghost" disabled={analyzingId === notice.id} onClick={() => analyzeNotice(notice.id)}>
+                    {analyzingId === notice.id ? "Analisando…" : "Analisar"}
+                  </button>
                 </div>
-                <button className="ghost" onClick={() => analyzeNotice(notice.id)}>
-                  Analisar
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </section>
 
           <section className="cards">
