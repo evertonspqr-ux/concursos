@@ -108,21 +108,26 @@ async def build_candidates(session: AsyncSession, user_id: uuid.UUID, exam_subje
 
 
 async def persist_items(session: AsyncSession, plan: StudyPlan, user_id: uuid.UUID, planned_items: list[PlannedItem]) -> None:
+    """Gera os IDs no Python (Mapped[...] já usa default=uuid.uuid4, client-side) para não
+    precisar de um flush de rede por item — evita ~2 round-trips por item gerado no plano,
+    que em planos longos (dezenas de dias) tornava a criação perceptivelmente lenta."""
     for planned in planned_items:
-        item = StudyPlanItem(
-            study_plan_id=plan.id,
-            subject_id=planned.subject_id,
-            topic_id=planned.topic_id,
-            scheduled_for=planned.scheduled_for,
-            planned_minutes=planned.planned_minutes,
-            priority=planned.priority,
+        item_id = uuid.uuid4()
+        session.add(
+            StudyPlanItem(
+                id=item_id,
+                study_plan_id=plan.id,
+                subject_id=planned.subject_id,
+                topic_id=planned.topic_id,
+                scheduled_for=planned.scheduled_for,
+                planned_minutes=planned.planned_minutes,
+                priority=planned.priority,
+            )
         )
-        session.add(item)
-        await session.flush()
         session.add(
             StudySession(
                 user_id=user_id,
-                study_plan_item_id=item.id,
+                study_plan_item_id=item_id,
                 subject_id=planned.subject_id,
                 topic_id=planned.topic_id,
                 started_at=planned.scheduled_for,
