@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, FileText, LayoutGrid, LogOut, Sparkles, Target, Upload, Users } from "lucide-react";
 
@@ -29,6 +29,10 @@ export default function Home() {
   const [me, setMe] = useState<Me | null>(null);
   const [username, setUsername] = useState("");
   const [savingName, setSavingName] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const req = async (path: string, init: RequestInit = {}, authToken = token) => {
     const res = await fetch(API + path, { ...init, headers: { Authorization: `Bearer ${authToken}`, ...init.headers } });
@@ -131,18 +135,38 @@ export default function Home() {
     }
   };
 
-  const uploadNotice = async (event: FormEvent<HTMLFormElement>) => {
+  const pickFile = (file: File | undefined | null) => {
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      setMsg("Só arquivos PDF são aceitos.");
+      return;
+    }
+    setPendingFile(file);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const file = new FormData(event.currentTarget).get("file");
-    if (!(file instanceof File) || !selected) return;
+    setDragActive(false);
+    if (!selected) return;
+    pickFile(event.dataTransfer.files?.[0]);
+  };
+
+  const submitUpload = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!pendingFile || !selected) return;
     const body = new FormData();
-    body.append("file", file);
+    body.append("file", pendingFile);
+    setUploading(true);
     try {
       await req(`/api/v1/exams/${selected}/notices`, { method: "POST", body });
       await loadNotices();
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setMsg("Edital importado.");
     } catch (error) {
       setMsg(error instanceof Error ? error.message : "Não deu pra importar o edital");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -314,13 +338,40 @@ export default function Home() {
         <div>
           <section className="panel">
             <h2>Edital e análise</h2>
-            <form onSubmit={uploadNotice}>
-              <input required name="file" type="file" accept="application/pdf" disabled={!selected} aria-label="Arquivo do edital em PDF" />
-              <button type="submit" disabled={!selected}>
-                <Upload size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
-                Importar edital
-              </button>
-            </form>
+
+            {!selected && <p className="hint" style={{ marginTop: 10 }}>Crie ou selecione um concurso ao lado para importar um edital.</p>}
+
+            {selected && (
+              <form onSubmit={submitUpload} style={{ marginTop: 12 }}>
+                <div
+                  className={`dropzone${dragActive ? " active" : ""}${pendingFile ? " filled" : ""}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={() => setDragActive(false)}
+                  onDrop={handleDrop}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <Upload size={18} />
+                  <span>{pendingFile ? pendingFile.name : "Arraste o PDF aqui ou clique para escolher"}</span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    aria-label="Arquivo do edital em PDF"
+                    style={{ display: "none" }}
+                    onChange={(e) => pickFile(e.target.files?.[0])}
+                  />
+                </div>
+                <button type="submit" disabled={!pendingFile || uploading} style={{ marginTop: 10 }}>
+                  <Upload size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+                  {uploading ? "Importando…" : "Importar edital"}
+                </button>
+              </form>
+            )}
 
             {notices.length === 0 && <p className="hint" style={{ marginTop: 14 }}>Nenhum edital importado ainda para este concurso.</p>}
 

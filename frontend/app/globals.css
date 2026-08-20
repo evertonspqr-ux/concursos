@@ -120,6 +120,39 @@ label.field {
   color: var(--text-faint);
 }
 
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border-radius: var(--radius-sm);
+  border: 1.5px dashed var(--border-strong);
+  background: var(--bg);
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.dropzone:hover {
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+
+.dropzone.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.dropzone.filled {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 input,
 select {
   padding: 11px 13px;
@@ -213,6 +246,37 @@ button.ghost:hover {
   height: 6px;
   border-radius: 999px;
   background: var(--accent);
+  flex-shrink: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.tabs button {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
   flex-shrink: 0;
 }
 
