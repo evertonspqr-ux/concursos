@@ -181,7 +181,7 @@ export default function Home() {
       setMsg(
         foundSomething
           ? "Edital analisado."
-          : "Analisado, mas não achou banca/disciplinas — provável PDF escaneado (imagem), sem texto pra ler."
+          : "Analisado, mas não achou banca/disciplinas. Confira se este é o edital completo (não um anexo/quadro de vagas) e se não é um PDF escaneado."
       );
     } catch (error) {
       setMsg(error instanceof Error ? error.message : "Não deu pra analisar o edital");
@@ -388,7 +388,7 @@ export default function Home() {
             {notices.map((notice) => {
               const analysis = notice.extraction_metadata.analysis;
               const subjectNames = analysis?.subjects?.map((s) => s.name).join(" · ");
-              const label = subjectNames || (analysis ? "Nada identificado (PDF pode ser escaneado)" : "Aguardando análise");
+              const label = subjectNames || (analysis ? "Nada identificado — confira se é o edital completo" : "Aguardando análise");
               return (
                 <div className="item" key={notice.id}>
                   <div>
