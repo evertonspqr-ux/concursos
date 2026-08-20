@@ -47,6 +47,8 @@ export default function Home() {
   const [rescheduling, setRescheduling] = useState(false);
   const [itemActionId, setItemActionId] = useState<string | null>(null);
   const [showAllDays, setShowAllDays] = useState(false);
+  const [rotinaView, setRotinaView] = useState<"semana" | "lista">("semana");
+  const [weekOffset, setWeekOffset] = useState(0);
   const [tab, setTab] = useState<"painel" | "usuarios" | "rotina">("painel");
   const [msg, setMsg] = useState("Entre para conectar seus dados.");
   const [me, setMe] = useState<Me | null>(null);
@@ -450,83 +452,177 @@ export default function Home() {
                     {activePlan.available_minutes_per_day} min/dia · {activePlan.starts_on} até {activePlan.ends_on || "data da prova"}
                   </small>
                 </div>
-                <button className="ghost" disabled={rescheduling} onClick={reschedulePlan}>
-                  {rescheduling ? "Reagendando…" : "Reagendar"}
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div className="view-toggle">
+                    <button className={rotinaView === "semana" ? "" : "ghost"} onClick={() => setRotinaView("semana")}>
+                      Semana
+                    </button>
+                    <button className={rotinaView === "lista" ? "" : "ghost"} onClick={() => setRotinaView("lista")}>
+                      Lista
+                    </button>
+                  </div>
+                  <button className="ghost" disabled={rescheduling} onClick={reschedulePlan}>
+                    {rescheduling ? "Reagendando…" : "Reagendar"}
+                  </button>
+                </div>
               </div>
 
               {schedule.length === 0 && <p className="hint" style={{ marginTop: 14 }}>Sem sessões geradas ainda.</p>}
 
-              {(() => {
-                const todayKey = new Date().toISOString().slice(0, 10);
-                const grouped = schedule.reduce<Record<string, ScheduleEntry[]>>((acc, entry) => {
-                  const key = entry.item.scheduled_for.slice(0, 10);
-                  (acc[key] ||= []).push(entry);
-                  return acc;
-                }, {});
-                const dateKeys = Object.keys(grouped).sort();
-                const visibleKeys = showAllDays ? dateKeys : dateKeys.slice(0, 7);
-                const hiddenDays = dateKeys.length - visibleKeys.length;
-                const priorityLabel = (p: number) => (p >= 0.6 ? "alta" : p >= 0.3 ? "média" : "baixa");
+              {schedule.length > 0 &&
+                (() => {
+                  const todayKey = new Date().toISOString().slice(0, 10);
+                  const grouped = schedule.reduce<Record<string, ScheduleEntry[]>>((acc, entry) => {
+                    const key = entry.item.scheduled_for.slice(0, 10);
+                    (acc[key] ||= []).push(entry);
+                    return acc;
+                  }, {});
+                  const priorityLabel = (p: number) => (p >= 0.6 ? "alta" : p >= 0.3 ? "média" : "baixa");
 
-                return (
-                  <>
-                    {visibleKeys.map((dateKey) => {
-                      const isToday = dateKey === todayKey;
-                      const dayLabel = new Date(`${dateKey}T00:00:00`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" });
-                      return (
-                        <div key={dateKey} style={{ marginTop: 18 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                            <b style={{ fontSize: "0.82rem", textTransform: "capitalize", color: isToday ? "var(--accent)" : "var(--text-muted)" }}>
-                              {isToday ? "Hoje" : dayLabel}
-                            </b>
-                            {isToday && <span className="status-dot" />}
+                  if (rotinaView === "semana") {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const mondayOffset = (today.getDay() + 6) % 7;
+                    const weekStart = new Date(today);
+                    weekStart.setDate(today.getDate() - mondayOffset + weekOffset * 7);
+                    const days = Array.from({ length: 7 }, (_, i) => {
+                      const d = new Date(weekStart);
+                      d.setDate(weekStart.getDate() + i);
+                      return d;
+                    });
+                    const weekLabel = `${weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – ${days[6].toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
+
+                    return (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, marginBottom: 10 }}>
+                          <button className="ghost" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Semana anterior">
+                            ←
+                          </button>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <b style={{ fontSize: "0.85rem" }}>{weekLabel}</b>
+                            {weekOffset !== 0 && (
+                              <button className="ghost" style={{ padding: "4px 10px", fontSize: "0.76rem" }} onClick={() => setWeekOffset(0)}>
+                                Hoje
+                              </button>
+                            )}
                           </div>
-                          {grouped[dateKey].map((entry) => {
-                            const when = new Date(entry.item.scheduled_for);
-                            const isDone = entry.session_status === "completed" || entry.session_status === "skipped";
+                          <button className="ghost" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Próxima semana">
+                            →
+                          </button>
+                        </div>
+
+                        <div className="week-grid">
+                          {days.map((d) => {
+                            const dateKey = d.toISOString().slice(0, 10);
+                            const isToday = dateKey === todayKey;
+                            const entries = (grouped[dateKey] || []).sort((a, b) => a.item.scheduled_for.localeCompare(b.item.scheduled_for));
                             return (
-                              <div className="item" key={entry.item.id}>
-                                <div>
-                                  <b>
-                                    {entry.subject_name || "Assunto"}
-                                    {entry.topic_name ? ` · ${entry.topic_name}` : ""}
-                                  </b>
-                                  <small>
-                                    {when.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {entry.item.planned_minutes} min · prioridade {priorityLabel(entry.item.priority)} ·{" "}
-                                    {entry.session_status === "completed" ? "Concluída" : entry.session_status === "skipped" ? "Pulada" : "Planejada"}
-                                  </small>
+                              <div className={`week-col${isToday ? " is-today" : ""}`} key={dateKey}>
+                                <div className="week-col-head">
+                                  <small>{d.toLocaleDateString("pt-BR", { weekday: "short" })}</small>
+                                  <b>{d.getDate()}</b>
                                 </div>
-                                {!isDone && (
-                                  <div style={{ display: "flex", gap: 8 }}>
-                                    <button className="ghost" disabled={itemActionId === entry.item.id} onClick={() => markItem(entry.item.id, "complete")}>
-                                      Concluir
-                                    </button>
-                                    <button className="ghost" disabled={itemActionId === entry.item.id} onClick={() => markItem(entry.item.id, "skip")}>
-                                      Pular
-                                    </button>
-                                  </div>
-                                )}
+                                <div className="week-col-body">
+                                  {entries.length === 0 && <span className="week-empty">—</span>}
+                                  {entries.map((entry) => {
+                                    const when = new Date(entry.item.scheduled_for);
+                                    const isDone = entry.session_status === "completed";
+                                    const isSkipped = entry.session_status === "skipped";
+                                    return (
+                                      <div className={`day-chip${isDone ? " is-done" : ""}${isSkipped ? " is-skipped" : ""}`} key={entry.item.id}>
+                                        <span className="day-chip-time">{when.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                                        <b>
+                                          {entry.subject_name || "Assunto"}
+                                          {entry.topic_name ? ` · ${entry.topic_name}` : ""}
+                                        </b>
+                                        <small>
+                                          {entry.item.planned_minutes} min · prioridade {priorityLabel(entry.item.priority)}
+                                        </small>
+                                        {!isDone && !isSkipped && (
+                                          <div className="day-chip-actions">
+                                            <button className="ghost" disabled={itemActionId === entry.item.id} onClick={() => markItem(entry.item.id, "complete")}>
+                                              Concluir
+                                            </button>
+                                            <button className="ghost" disabled={itemActionId === entry.item.id} onClick={() => markItem(entry.item.id, "skip")}>
+                                              Pular
+                                            </button>
+                                          </div>
+                                        )}
+                                        {(isDone || isSkipped) && <small>{isDone ? "Concluída" : "Pulada"}</small>}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             );
                           })}
                         </div>
-                      );
-                    })}
+                      </>
+                    );
+                  }
 
-                    {hiddenDays > 0 && (
-                      <button className="ghost" style={{ marginTop: 16 }} onClick={() => setShowAllDays(true)}>
-                        Ver mais {hiddenDays} dias
-                      </button>
-                    )}
-                    {showAllDays && dateKeys.length > 7 && (
-                      <button className="ghost" style={{ marginTop: 16 }} onClick={() => setShowAllDays(false)}>
-                        Mostrar menos
-                      </button>
-                    )}
-                  </>
-                );
-              })()}
+                  const dateKeys = Object.keys(grouped).sort();
+                  const visibleKeys = showAllDays ? dateKeys : dateKeys.slice(0, 7);
+                  const hiddenDays = dateKeys.length - visibleKeys.length;
+
+                  return (
+                    <>
+                      {visibleKeys.map((dateKey) => {
+                        const isToday = dateKey === todayKey;
+                        const dayLabel = new Date(`${dateKey}T00:00:00`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" });
+                        return (
+                          <div key={dateKey} style={{ marginTop: 18 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                              <b style={{ fontSize: "0.82rem", textTransform: "capitalize", color: isToday ? "var(--accent)" : "var(--text-muted)" }}>
+                                {isToday ? "Hoje" : dayLabel}
+                              </b>
+                              {isToday && <span className="status-dot" />}
+                            </div>
+                            {grouped[dateKey].map((entry) => {
+                              const when = new Date(entry.item.scheduled_for);
+                              const isDone = entry.session_status === "completed" || entry.session_status === "skipped";
+                              return (
+                                <div className="item" key={entry.item.id}>
+                                  <div>
+                                    <b>
+                                      {entry.subject_name || "Assunto"}
+                                      {entry.topic_name ? ` · ${entry.topic_name}` : ""}
+                                    </b>
+                                    <small>
+                                      {when.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {entry.item.planned_minutes} min · prioridade {priorityLabel(entry.item.priority)} ·{" "}
+                                      {entry.session_status === "completed" ? "Concluída" : entry.session_status === "skipped" ? "Pulada" : "Planejada"}
+                                    </small>
+                                  </div>
+                                  {!isDone && (
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                      <button className="ghost" disabled={itemActionId === entry.item.id} onClick={() => markItem(entry.item.id, "complete")}>
+                                        Concluir
+                                      </button>
+                                      <button className="ghost" disabled={itemActionId === entry.item.id} onClick={() => markItem(entry.item.id, "skip")}>
+                                        Pular
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+
+                      {hiddenDays > 0 && (
+                        <button className="ghost" style={{ marginTop: 16 }} onClick={() => setShowAllDays(true)}>
+                          Ver mais {hiddenDays} dias
+                        </button>
+                      )}
+                      {showAllDays && dateKeys.length > 7 && (
+                        <button className="ghost" style={{ marginTop: 16 }} onClick={() => setShowAllDays(false)}>
+                          Mostrar menos
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
             </>
           )}
         </motion.section>

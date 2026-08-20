@@ -367,6 +367,130 @@ button.icon-button:hover {
   margin-top: 3px;
 }
 
+/* ---------- Rotina: visão semanal ---------- */
+
+.view-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.view-toggle button {
+  padding: 7px 12px;
+  font-size: 0.8rem;
+}
+
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.week-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.week-col.is-today {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.week-col-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.week-col-head small {
+  text-transform: capitalize;
+  font-size: 0.7rem;
+}
+
+.week-col-head b {
+  font-family: var(--font-display), serif;
+  font-size: 1.1rem;
+}
+
+.is-today .week-col-head b {
+  color: var(--accent);
+}
+
+.week-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  flex: 1;
+}
+
+.week-empty {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  text-align: center;
+  padding-top: 8px;
+}
+
+.day-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+.day-chip b {
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.day-chip-time {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.day-chip.is-done {
+  opacity: 0.55;
+}
+
+.day-chip.is-skipped {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.day-chip-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.day-chip-actions button {
+  padding: 5px 8px;
+  font-size: 0.7rem;
+  flex: 1;
+}
+
+@media (max-width: 860px) {
+  .week-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Motion / a11y ---------- */
 
 @media (prefers-reduced-motion: reduce) {
