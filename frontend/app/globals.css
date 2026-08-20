@@ -217,6 +217,18 @@ button.ghost:hover {
   box-shadow: none;
 }
 
+button.icon-button {
+  padding: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+button.icon-button:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .hint {
   margin-top: 2px;
   font-size: 0.82rem;

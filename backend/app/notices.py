@@ -108,6 +108,16 @@ async def analyze_and_apply_notice(exam_id: uuid.UUID, notice_id: uuid.UUID, ses
     return result
 
 
+@router.delete("/{notice_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_notice(exam_id: uuid.UUID, notice_id: uuid.UUID, session: AsyncSession = Depends(get_session), _: User = Depends(get_current_user)) -> None:
+    notice = await session.scalar(select(Notice).where(Notice.id == notice_id, Notice.exam_id == exam_id))
+    if not notice:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Edital não encontrado")
+    storage_path(notice.storage_key).unlink(missing_ok=True)
+    await session.delete(notice)
+    await session.commit()
+
+
 @router.get("/{notice_id}/file")
 async def download_notice(exam_id: uuid.UUID, notice_id: uuid.UUID, session: AsyncSession = Depends(get_session), _: User = Depends(get_current_user)) -> FileResponse:
     notice = await session.scalar(select(Notice).where(Notice.id == notice_id, Notice.exam_id == exam_id))

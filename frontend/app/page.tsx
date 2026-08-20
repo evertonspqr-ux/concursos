@@ -2,7 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, FileText, LayoutGrid, LogOut, Sparkles, Target, Upload, Users } from "lucide-react";
+import { BookOpen, FileText, LayoutGrid, LogOut, Sparkles, Target, Trash2, Upload, Users } from "lucide-react";
 
 type Exam = { id: string; title: string };
 type Notice = {
@@ -33,6 +33,7 @@ export default function Home() {
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const req = async (path: string, init: RequestInit = {}, authToken = token) => {
@@ -187,6 +188,20 @@ export default function Home() {
       setMsg(error instanceof Error ? error.message : "Não deu pra analisar o edital");
     } finally {
       setAnalyzingId(null);
+    }
+  };
+
+  const deleteNotice = async (noticeId: string) => {
+    if (!confirm("Excluir este edital? Não dá pra desfazer.")) return;
+    setDeletingId(noticeId);
+    try {
+      await req(`/api/v1/exams/${selected}/notices/${noticeId}`, { method: "DELETE" });
+      await loadNotices();
+      setMsg("Edital excluído.");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Não deu pra excluir o edital");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -395,9 +410,20 @@ export default function Home() {
                     <b>{notice.filename}</b>
                     <small>{label}</small>
                   </div>
-                  <button className="ghost" disabled={analyzingId === notice.id} onClick={() => analyzeNotice(notice.id)}>
-                    {analyzingId === notice.id ? "Analisando…" : "Analisar"}
-                  </button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="ghost" disabled={analyzingId === notice.id} onClick={() => analyzeNotice(notice.id)}>
+                      {analyzingId === notice.id ? "Analisando…" : "Analisar"}
+                    </button>
+                    <button
+                      className="ghost icon-button"
+                      disabled={deletingId === notice.id}
+                      onClick={() => deleteNotice(notice.id)}
+                      aria-label={`Excluir ${notice.filename}`}
+                      title="Excluir edital"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
