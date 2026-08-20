@@ -118,7 +118,8 @@ export default function Home() {
 
   const createExam = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       const created = await (
         await req("/api/v1/exams", {
@@ -129,7 +130,7 @@ export default function Home() {
       ).json();
       setExams((current) => [created, ...current]);
       setSelected(created.id);
-      event.currentTarget.reset();
+      formElement.reset();
     } catch (error) {
       setMsg(error instanceof Error ? error.message : "Não deu pra criar o concurso");
     }
