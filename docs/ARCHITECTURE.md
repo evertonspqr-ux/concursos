@@ -28,6 +28,8 @@ O bloco 1 entrega infraestrutura executável e auth básica. O bloco 2 entrega o
 
 O bloco 3 oferece `POST /api/v1/exams/{exam_id}/notices` para PDFs autenticados. Arquivos são guardados fora do banco por `storage_key`; texto e metadados extraídos ficam em `Notice`. O tamanho máximo e o diretório de armazenamento são configuráveis por ambiente.
 
+Quando o texto embutido tiver menos de `max(OCR_MIN_EMBEDDED_CHARS, page_count × OCR_MIN_EMBEDDED_CHARS_PER_PAGE)`, o bloco 3 renderiza as páginas com PyMuPDF e usa Tesseract (`por+eng`) como fallback. `Notice.extraction_metadata.text_source` informa `embedded`, `ocr` ou `embedded_ocr_failed`; também são persistidos comprimento original, limite usado e cobertura por página. Assim, o bloco 4 analisa o mesmo `extracted_text` independentemente da origem.
+
 O bloco 4 oferece `POST /api/v1/exams/{exam_id}/notices/{notice_id}/analyze`. A análise heurística é persistida em `Notice.extraction_metadata.analysis` e aplica dados identificados a `Exam`, `Position`, `Subject` e `ExamSubject`.
 
 O bloco 5 oferece provas e gabaritos em `/api/v1/exams/{exam_id}/papers`. Questões importadas recebem uma ordem imutável por prova; respostas do usuário ficam em `UserQuestionAttempt`, e a correção usa o peso de `ExamPaperQuestion`.

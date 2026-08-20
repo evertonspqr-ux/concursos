@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     backend_cors_origins: str = "http://localhost:3000"
     upload_directory: str = "/app/uploads"
     max_upload_size_bytes: int = 26_214_400
+    ocr_enabled: bool = True
+    ocr_languages: str = "por+eng"
+    ocr_min_embedded_chars_per_page: int = 300
+    ocr_min_embedded_chars: int = 1_200
+    ocr_render_scale: float = 2.0
+    ocr_timeout_seconds: int = 45
     anthropic_api_key: str | None = None
     classifier_model: str = "claude-haiku-4-5-20251001"
     classifier_review_threshold: float = 0.6
