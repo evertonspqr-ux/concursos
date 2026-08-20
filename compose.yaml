@@ -1,0 +1,31 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-concursos}
+      POSTGRES_USER: ${POSTGRES_USER:-concursos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-concursos}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-concursos} -d ${POSTGRES_DB:-concursos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://concursos:concursos@db:5432/concursos}
+    ports: ["8000:8000"]
+    volumes: [uploads_data:/app/uploads]
+    depends_on:
+      db: { condition: service_healthy }
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports: ["3000:3000"]
+    depends_on: [backend]
+volumes:
+  postgres_data:
+  uploads_data:
