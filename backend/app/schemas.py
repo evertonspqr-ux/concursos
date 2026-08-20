@@ -30,6 +30,12 @@ class ExamRead(ExamCreate):
     status: str
     created_at: datetime
 
+class UserSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    full_name: str | None
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
